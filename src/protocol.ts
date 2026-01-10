@@ -172,6 +172,120 @@ const pdfSchema = baseCommandSchema.extend({
   format: z.enum(['Letter', 'Legal', 'Tabloid', 'Ledger', 'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6']).optional(),
 });
 
+const routeSchema = baseCommandSchema.extend({
+  action: z.literal('route'),
+  url: z.string().min(1),
+  response: z.object({
+    status: z.number().optional(),
+    body: z.string().optional(),
+    contentType: z.string().optional(),
+    headers: z.record(z.string()).optional(),
+  }).optional(),
+  abort: z.boolean().optional(),
+});
+
+const unrouteSchema = baseCommandSchema.extend({
+  action: z.literal('unroute'),
+  url: z.string().optional(),
+});
+
+const requestsSchema = baseCommandSchema.extend({
+  action: z.literal('requests'),
+  filter: z.string().optional(),
+  clear: z.boolean().optional(),
+});
+
+const downloadSchema = baseCommandSchema.extend({
+  action: z.literal('download'),
+  selector: z.string().min(1),
+  path: z.string().min(1),
+});
+
+const geolocationSchema = baseCommandSchema.extend({
+  action: z.literal('geolocation'),
+  latitude: z.number(),
+  longitude: z.number(),
+  accuracy: z.number().optional(),
+});
+
+const permissionsSchema = baseCommandSchema.extend({
+  action: z.literal('permissions'),
+  permissions: z.array(z.string()),
+  grant: z.boolean(),
+});
+
+const viewportSchema = baseCommandSchema.extend({
+  action: z.literal('viewport'),
+  width: z.number().positive(),
+  height: z.number().positive(),
+});
+
+const userAgentSchema = baseCommandSchema.extend({
+  action: z.literal('useragent'),
+  userAgent: z.string().min(1),
+});
+
+const deviceSchema = baseCommandSchema.extend({
+  action: z.literal('device'),
+  device: z.string().min(1),
+});
+
+const backSchema = baseCommandSchema.extend({
+  action: z.literal('back'),
+});
+
+const forwardSchema = baseCommandSchema.extend({
+  action: z.literal('forward'),
+});
+
+const reloadSchema = baseCommandSchema.extend({
+  action: z.literal('reload'),
+});
+
+const urlSchema = baseCommandSchema.extend({
+  action: z.literal('url'),
+});
+
+const titleSchema = baseCommandSchema.extend({
+  action: z.literal('title'),
+});
+
+const getAttributeSchema = baseCommandSchema.extend({
+  action: z.literal('getattribute'),
+  selector: z.string().min(1),
+  attribute: z.string().min(1),
+});
+
+const getTextSchema = baseCommandSchema.extend({
+  action: z.literal('gettext'),
+  selector: z.string().min(1),
+});
+
+const isVisibleSchema = baseCommandSchema.extend({
+  action: z.literal('isvisible'),
+  selector: z.string().min(1),
+});
+
+const isEnabledSchema = baseCommandSchema.extend({
+  action: z.literal('isenabled'),
+  selector: z.string().min(1),
+});
+
+const isCheckedSchema = baseCommandSchema.extend({
+  action: z.literal('ischecked'),
+  selector: z.string().min(1),
+});
+
+const countSchema = baseCommandSchema.extend({
+  action: z.literal('count'),
+  selector: z.string().min(1),
+});
+
+const boundingBoxSchema = baseCommandSchema.extend({
+  action: z.literal('boundingbox'),
+  selector: z.string().min(1),
+});
+
 const pressSchema = baseCommandSchema.extend({
   action: z.literal('press'),
   key: z.string().min(1),
@@ -302,6 +416,27 @@ const commandSchema = z.discriminatedUnion('action', [
   storageClearSchema,
   dialogSchema,
   pdfSchema,
+  routeSchema,
+  unrouteSchema,
+  requestsSchema,
+  downloadSchema,
+  geolocationSchema,
+  permissionsSchema,
+  viewportSchema,
+  userAgentSchema,
+  deviceSchema,
+  backSchema,
+  forwardSchema,
+  reloadSchema,
+  urlSchema,
+  titleSchema,
+  getAttributeSchema,
+  getTextSchema,
+  isVisibleSchema,
+  isEnabledSchema,
+  isCheckedSchema,
+  countSchema,
+  boundingBoxSchema,
 ]);
 
 // Parse result type

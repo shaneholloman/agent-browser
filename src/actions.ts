@@ -35,6 +35,20 @@ import type {
   StorageClearCommand,
   DialogCommand,
   PdfCommand,
+  RouteCommand,
+  RequestsCommand,
+  DownloadCommand,
+  GeolocationCommand,
+  PermissionsCommand,
+  ViewportCommand,
+  DeviceCommand,
+  GetAttributeCommand,
+  GetTextCommand,
+  IsVisibleCommand,
+  IsEnabledCommand,
+  IsCheckedCommand,
+  CountCommand,
+  BoundingBoxCommand,
   NavigateData,
   ScreenshotData,
   EvaluateData,
@@ -140,6 +154,48 @@ export async function executeCommand(
         return await handleDialog(command, browser);
       case 'pdf':
         return await handlePdf(command, browser);
+      case 'route':
+        return await handleRoute(command, browser);
+      case 'unroute':
+        return await handleUnroute(command, browser);
+      case 'requests':
+        return await handleRequests(command, browser);
+      case 'download':
+        return await handleDownload(command, browser);
+      case 'geolocation':
+        return await handleGeolocation(command, browser);
+      case 'permissions':
+        return await handlePermissions(command, browser);
+      case 'viewport':
+        return await handleViewport(command, browser);
+      case 'useragent':
+        return await handleUserAgent(command, browser);
+      case 'device':
+        return await handleDevice(command, browser);
+      case 'back':
+        return await handleBack(command, browser);
+      case 'forward':
+        return await handleForward(command, browser);
+      case 'reload':
+        return await handleReload(command, browser);
+      case 'url':
+        return await handleUrl(command, browser);
+      case 'title':
+        return await handleTitle(command, browser);
+      case 'getattribute':
+        return await handleGetAttribute(command, browser);
+      case 'gettext':
+        return await handleGetText(command, browser);
+      case 'isvisible':
+        return await handleIsVisible(command, browser);
+      case 'isenabled':
+        return await handleIsEnabled(command, browser);
+      case 'ischecked':
+        return await handleIsChecked(command, browser);
+      case 'count':
+        return await handleCount(command, browser);
+      case 'boundingbox':
+        return await handleBoundingBox(command, browser);
       default: {
         // TypeScript narrows to never here, but we handle it for safety
         const unknownCommand = command as { id: string; action: string };
@@ -696,4 +752,231 @@ async function handlePdf(
     format: command.format ?? 'Letter',
   });
   return successResponse(command.id, { path: command.path });
+}
+
+// Network & Request handlers
+
+async function handleRoute(
+  command: RouteCommand,
+  browser: BrowserManager
+): Promise<Response> {
+  await browser.addRoute(command.url, {
+    response: command.response,
+    abort: command.abort,
+  });
+  return successResponse(command.id, { routed: command.url });
+}
+
+async function handleUnroute(
+  command: Command & { action: 'unroute'; url?: string },
+  browser: BrowserManager
+): Promise<Response> {
+  await browser.removeRoute(command.url);
+  return successResponse(command.id, { unrouted: command.url ?? 'all' });
+}
+
+async function handleRequests(
+  command: RequestsCommand,
+  browser: BrowserManager
+): Promise<Response> {
+  if (command.clear) {
+    browser.clearRequests();
+    return successResponse(command.id, { cleared: true });
+  }
+  
+  // Start tracking if not already
+  browser.startRequestTracking();
+  
+  const requests = browser.getRequests(command.filter);
+  return successResponse(command.id, { requests });
+}
+
+async function handleDownload(
+  command: DownloadCommand,
+  browser: BrowserManager
+): Promise<Response> {
+  const page = browser.getPage();
+  
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.click(command.selector),
+  ]);
+  
+  await download.saveAs(command.path);
+  return successResponse(command.id, { 
+    path: command.path,
+    suggestedFilename: download.suggestedFilename(),
+  });
+}
+
+async function handleGeolocation(
+  command: GeolocationCommand,
+  browser: BrowserManager
+): Promise<Response> {
+  await browser.setGeolocation(command.latitude, command.longitude, command.accuracy);
+  return successResponse(command.id, { 
+    latitude: command.latitude,
+    longitude: command.longitude,
+  });
+}
+
+async function handlePermissions(
+  command: PermissionsCommand,
+  browser: BrowserManager
+): Promise<Response> {
+  await browser.setPermissions(command.permissions, command.grant);
+  return successResponse(command.id, { 
+    permissions: command.permissions,
+    granted: command.grant,
+  });
+}
+
+async function handleViewport(
+  command: ViewportCommand,
+  browser: BrowserManager
+): Promise<Response> {
+  await browser.setViewport(command.width, command.height);
+  return successResponse(command.id, { 
+    width: command.width,
+    height: command.height,
+  });
+}
+
+async function handleUserAgent(
+  command: Command & { action: 'useragent'; userAgent: string },
+  browser: BrowserManager
+): Promise<Response> {
+  const page = browser.getPage();
+  const context = page.context();
+  // Note: Can't change user agent after context is created, but we can for new pages
+  return successResponse(command.id, { 
+    note: 'User agent can only be set at launch time. Use device command instead.',
+  });
+}
+
+async function handleDevice(
+  command: DeviceCommand,
+  browser: BrowserManager
+): Promise<Response> {
+  const device = browser.getDevice(command.device);
+  if (!device) {
+    const available = browser.listDevices().slice(0, 10).join(', ');
+    throw new Error(`Unknown device: ${command.device}. Available: ${available}...`);
+  }
+  
+  // Apply device viewport
+  await browser.setViewport(device.viewport.width, device.viewport.height);
+  
+  return successResponse(command.id, { 
+    device: command.device,
+    viewport: device.viewport,
+    userAgent: device.userAgent,
+  });
+}
+
+async function handleBack(
+  command: Command & { action: 'back' },
+  browser: BrowserManager
+): Promise<Response> {
+  const page = browser.getPage();
+  await page.goBack();
+  return successResponse(command.id, { url: page.url() });
+}
+
+async function handleForward(
+  command: Command & { action: 'forward' },
+  browser: BrowserManager
+): Promise<Response> {
+  const page = browser.getPage();
+  await page.goForward();
+  return successResponse(command.id, { url: page.url() });
+}
+
+async function handleReload(
+  command: Command & { action: 'reload' },
+  browser: BrowserManager
+): Promise<Response> {
+  const page = browser.getPage();
+  await page.reload();
+  return successResponse(command.id, { url: page.url() });
+}
+
+async function handleUrl(
+  command: Command & { action: 'url' },
+  browser: BrowserManager
+): Promise<Response> {
+  const page = browser.getPage();
+  return successResponse(command.id, { url: page.url() });
+}
+
+async function handleTitle(
+  command: Command & { action: 'title' },
+  browser: BrowserManager
+): Promise<Response> {
+  const page = browser.getPage();
+  const title = await page.title();
+  return successResponse(command.id, { title });
+}
+
+async function handleGetAttribute(
+  command: GetAttributeCommand,
+  browser: BrowserManager
+): Promise<Response> {
+  const page = browser.getPage();
+  const value = await page.getAttribute(command.selector, command.attribute);
+  return successResponse(command.id, { attribute: command.attribute, value });
+}
+
+async function handleGetText(
+  command: GetTextCommand,
+  browser: BrowserManager
+): Promise<Response> {
+  const page = browser.getPage();
+  const text = await page.textContent(command.selector);
+  return successResponse(command.id, { text });
+}
+
+async function handleIsVisible(
+  command: IsVisibleCommand,
+  browser: BrowserManager
+): Promise<Response> {
+  const page = browser.getPage();
+  const visible = await page.isVisible(command.selector);
+  return successResponse(command.id, { visible });
+}
+
+async function handleIsEnabled(
+  command: IsEnabledCommand,
+  browser: BrowserManager
+): Promise<Response> {
+  const page = browser.getPage();
+  const enabled = await page.isEnabled(command.selector);
+  return successResponse(command.id, { enabled });
+}
+
+async function handleIsChecked(
+  command: IsCheckedCommand,
+  browser: BrowserManager
+): Promise<Response> {
+  const page = browser.getPage();
+  const checked = await page.isChecked(command.selector);
+  return successResponse(command.id, { checked });
+}
+
+async function handleCount(
+  command: CountCommand,
+  browser: BrowserManager
+): Promise<Response> {
+  const page = browser.getPage();
+  const count = await page.locator(command.selector).count();
+  return successResponse(command.id, { count });
+}
+
+async function handleBoundingBox(
+  command: BoundingBoxCommand,
+  browser: BrowserManager
+): Promise<Response> {
+  const page = browser.getPage();
+  const box = await page.locator(command.selector).boundingBox();
+  return successResponse(command.id, { box });
 }

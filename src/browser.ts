@@ -1,5 +1,13 @@
-import { chromium, firefox, webkit, type Browser, type BrowserContext, type Page, type Frame, type Dialog } from 'playwright';
+import { chromium, firefox, webkit, devices, type Browser, type BrowserContext, type Page, type Frame, type Dialog, type Request, type Route } from 'playwright';
 import type { LaunchCommand } from './types.js';
+
+interface TrackedRequest {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  timestamp: number;
+  resourceType: string;
+}
 
 /**
  * Manages the Playwright browser lifecycle with multiple tabs/windows
@@ -11,6 +19,8 @@ export class BrowserManager {
   private activePageIndex: number = 0;
   private activeFrame: Frame | null = null;
   private dialogHandler: ((dialog: Dialog) => Promise<void>) | null = null;
+  private trackedRequests: TrackedRequest[] = [];
+  private routes: Map<string, (route: Route) => Promise<void>> = new Map();
 
   /**
    * Check if browser is launched
@@ -108,6 +118,137 @@ export class BrowserManager {
       page.removeListener('dialog', this.dialogHandler);
       this.dialogHandler = null;
     }
+  }
+
+  /**
+   * Start tracking requests
+   */
+  startRequestTracking(): void {
+    const page = this.getPage();
+    page.on('request', (request: Request) => {
+      this.trackedRequests.push({
+        url: request.url(),
+        method: request.method(),
+        headers: request.headers(),
+        timestamp: Date.now(),
+        resourceType: request.resourceType(),
+      });
+    });
+  }
+
+  /**
+   * Get tracked requests
+   */
+  getRequests(filter?: string): TrackedRequest[] {
+    if (filter) {
+      return this.trackedRequests.filter(r => r.url.includes(filter));
+    }
+    return this.trackedRequests;
+  }
+
+  /**
+   * Clear tracked requests
+   */
+  clearRequests(): void {
+    this.trackedRequests = [];
+  }
+
+  /**
+   * Add a route to intercept requests
+   */
+  async addRoute(
+    url: string,
+    options: {
+      response?: { status?: number; body?: string; contentType?: string; headers?: Record<string, string> };
+      abort?: boolean;
+    }
+  ): Promise<void> {
+    const page = this.getPage();
+    
+    const handler = async (route: Route) => {
+      if (options.abort) {
+        await route.abort();
+      } else if (options.response) {
+        await route.fulfill({
+          status: options.response.status ?? 200,
+          body: options.response.body ?? '',
+          contentType: options.response.contentType ?? 'text/plain',
+          headers: options.response.headers,
+        });
+      } else {
+        await route.continue();
+      }
+    };
+    
+    this.routes.set(url, handler);
+    await page.route(url, handler);
+  }
+
+  /**
+   * Remove a route
+   */
+  async removeRoute(url?: string): Promise<void> {
+    const page = this.getPage();
+    
+    if (url) {
+      const handler = this.routes.get(url);
+      if (handler) {
+        await page.unroute(url, handler);
+        this.routes.delete(url);
+      }
+    } else {
+      // Remove all routes
+      for (const [routeUrl, handler] of this.routes) {
+        await page.unroute(routeUrl, handler);
+      }
+      this.routes.clear();
+    }
+  }
+
+  /**
+   * Set geolocation
+   */
+  async setGeolocation(latitude: number, longitude: number, accuracy?: number): Promise<void> {
+    const context = this.contexts[0];
+    if (context) {
+      await context.setGeolocation({ latitude, longitude, accuracy });
+    }
+  }
+
+  /**
+   * Set permissions
+   */
+  async setPermissions(permissions: string[], grant: boolean): Promise<void> {
+    const context = this.contexts[0];
+    if (context) {
+      if (grant) {
+        await context.grantPermissions(permissions);
+      } else {
+        await context.clearPermissions();
+      }
+    }
+  }
+
+  /**
+   * Set viewport
+   */
+  async setViewport(width: number, height: number): Promise<void> {
+    const page = this.getPage();
+    await page.setViewportSize({ width, height });
+  }
+
+  /**
+   * Get device descriptor
+   */
+  getDevice(deviceName: string): typeof devices[keyof typeof devices] | undefined {
+    return devices[deviceName as keyof typeof devices];
+  }
+
+  /**
+   * List available devices
+   */
+  listDevices(): string[] {
+    return Object.keys(devices);
   }
 
   /**

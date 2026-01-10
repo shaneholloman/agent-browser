@@ -107,6 +107,37 @@ ${c('yellow', 'Dialog Commands:')}
   ${c('cyan', 'dialog accept')} [text]          Accept next dialog
   ${c('cyan', 'dialog dismiss')}                Dismiss next dialog
 
+${c('yellow', 'Navigation:')}
+  ${c('cyan', 'back')}                          Go back
+  ${c('cyan', 'forward')}                       Go forward
+  ${c('cyan', 'reload')}                        Reload page
+  ${c('cyan', 'url')}                           Get current URL
+  ${c('cyan', 'title')}                         Get page title
+
+${c('yellow', 'Element Info:')}
+  ${c('cyan', 'gettext')} <selector>            Get element text
+  ${c('cyan', 'getattr')} <selector> <attr>     Get attribute value
+  ${c('cyan', 'isvisible')} <selector>          Check if visible
+  ${c('cyan', 'isenabled')} <selector>          Check if enabled
+  ${c('cyan', 'ischecked')} <selector>          Check if checked
+  ${c('cyan', 'count')} <selector>              Count matching elements
+  ${c('cyan', 'boundingbox')} <selector>        Get element bounds
+
+${c('yellow', 'Network:')}
+  ${c('cyan', 'route')} <url> [--abort]         Intercept requests
+  ${c('cyan', 'route')} <url> --body <json>     Mock response
+  ${c('cyan', 'unroute')} [url]                 Remove route(s)
+  ${c('cyan', 'requests')} [--filter url]       Get tracked requests
+
+${c('yellow', 'Browser Settings:')}
+  ${c('cyan', 'viewport')} <width> <height>     Set viewport size
+  ${c('cyan', 'device')} <name>                 Emulate device
+  ${c('cyan', 'geolocation')} <lat> <lng>       Set location
+  ${c('cyan', 'permissions')} grant|deny <...>  Set permissions
+
+${c('yellow', 'Downloads:')}
+  ${c('cyan', 'download')} <selector> <path>    Download file
+
 ${c('yellow', 'Tab/Window Commands:')}
   ${c('cyan', 'tab new')}                       Open a new tab
   ${c('cyan', 'tab list')}                      List all open tabs
@@ -164,6 +195,10 @@ function printResponse(response: Response, jsonMode: boolean): void {
   if (data.url && data.title) {
     console.log(c('green', '✓'), c('bold', data.title as string));
     console.log(c('dim', `  ${data.url}`));
+  } else if (data.url && !data.title) {
+    console.log(data.url);
+  } else if (data.title && !data.url) {
+    console.log(data.title);
   } else if (data.html) {
     console.log(data.html);
   } else if (data.snapshot) {
@@ -210,6 +245,46 @@ function printResponse(response: Response, jsonMode: boolean): void {
     console.log(c('green', '✓'), `Uploaded ${files.length} file(s)`);
   } else if (data.handler) {
     console.log(c('green', '✓'), `Dialog handler set to ${data.response}`);
+  } else if (data.text !== undefined) {
+    console.log(data.text ?? c('dim', 'null'));
+  } else if (data.attribute !== undefined) {
+    console.log(data.value ?? c('dim', 'null'));
+  } else if (data.visible !== undefined) {
+    console.log(data.visible ? c('green', 'true') : c('red', 'false'));
+  } else if (data.enabled !== undefined) {
+    console.log(data.enabled ? c('green', 'true') : c('red', 'false'));
+  } else if (data.checked !== undefined) {
+    console.log(data.checked ? c('green', 'true') : c('red', 'false'));
+  } else if (data.count !== undefined) {
+    console.log(data.count);
+  } else if (data.box) {
+    const box = data.box as { x: number; y: number; width: number; height: number };
+    console.log(`x: ${box.x}, y: ${box.y}, width: ${box.width}, height: ${box.height}`);
+  } else if (data.requests) {
+    const reqs = data.requests as Array<{ url: string; method: string; resourceType: string }>;
+    if (reqs.length === 0) {
+      console.log(c('dim', 'No requests tracked'));
+    } else {
+      reqs.forEach(req => {
+        console.log(`${c('cyan', req.method)} ${req.url}`);
+        console.log(c('dim', `  ${req.resourceType}`));
+      });
+    }
+  } else if (data.routed) {
+    console.log(c('green', '✓'), `Route added: ${data.routed}`);
+  } else if (data.unrouted) {
+    console.log(c('green', '✓'), `Route removed: ${data.unrouted}`);
+  } else if (data.device) {
+    const vp = data.viewport as { width: number; height: number };
+    console.log(c('green', '✓'), `Emulating ${data.device}`);
+    console.log(c('dim', `  Viewport: ${vp.width}x${vp.height}`));
+  } else if (data.latitude !== undefined) {
+    console.log(c('green', '✓'), `Location set to ${data.latitude}, ${data.longitude}`);
+  } else if (data.width !== undefined && data.height !== undefined) {
+    console.log(c('green', '✓'), `Viewport: ${data.width}x${data.height}`);
+  } else if (data.suggestedFilename) {
+    console.log(c('green', '✓'), `Downloaded: ${data.suggestedFilename}`);
+    console.log(c('dim', `  Saved to: ${data.path}`));
   } else if (data.clicked || data.typed || data.pressed || data.hovered || data.scrolled || data.selected || data.waited || data.filled || data.checked || data.unchecked || data.focused || data.dragged || data.switched || data.set || data.cleared) {
     console.log(c('green', '✓'), 'Done');
   } else if (data.launched) {
@@ -634,6 +709,198 @@ async function main(): Promise<void> {
         process.exit(1);
       }
       cmd = { id, action: 'dialog', response, promptText };
+      break;
+    }
+    
+    case 'back': {
+      cmd = { id, action: 'back' };
+      break;
+    }
+    
+    case 'forward': {
+      cmd = { id, action: 'forward' };
+      break;
+    }
+    
+    case 'reload': {
+      cmd = { id, action: 'reload' };
+      break;
+    }
+    
+    case 'url': {
+      cmd = { id, action: 'url' };
+      break;
+    }
+    
+    case 'title': {
+      cmd = { id, action: 'title' };
+      break;
+    }
+    
+    case 'gettext': {
+      const selector = cleanArgs[1];
+      if (!selector) {
+        console.error(c('red', 'Error:'), 'Selector required');
+        process.exit(1);
+      }
+      cmd = { id, action: 'gettext', selector };
+      break;
+    }
+    
+    case 'getattr':
+    case 'getattribute': {
+      const selector = cleanArgs[1];
+      const attribute = cleanArgs[2];
+      if (!selector || !attribute) {
+        console.error(c('red', 'Error:'), 'Selector and attribute required');
+        process.exit(1);
+      }
+      cmd = { id, action: 'getattribute', selector, attribute };
+      break;
+    }
+    
+    case 'isvisible': {
+      const selector = cleanArgs[1];
+      if (!selector) {
+        console.error(c('red', 'Error:'), 'Selector required');
+        process.exit(1);
+      }
+      cmd = { id, action: 'isvisible', selector };
+      break;
+    }
+    
+    case 'isenabled': {
+      const selector = cleanArgs[1];
+      if (!selector) {
+        console.error(c('red', 'Error:'), 'Selector required');
+        process.exit(1);
+      }
+      cmd = { id, action: 'isenabled', selector };
+      break;
+    }
+    
+    case 'ischecked': {
+      const selector = cleanArgs[1];
+      if (!selector) {
+        console.error(c('red', 'Error:'), 'Selector required');
+        process.exit(1);
+      }
+      cmd = { id, action: 'ischecked', selector };
+      break;
+    }
+    
+    case 'count': {
+      const selector = cleanArgs[1];
+      if (!selector) {
+        console.error(c('red', 'Error:'), 'Selector required');
+        process.exit(1);
+      }
+      cmd = { id, action: 'count', selector };
+      break;
+    }
+    
+    case 'boundingbox':
+    case 'bbox': {
+      const selector = cleanArgs[1];
+      if (!selector) {
+        console.error(c('red', 'Error:'), 'Selector required');
+        process.exit(1);
+      }
+      cmd = { id, action: 'boundingbox', selector };
+      break;
+    }
+    
+    case 'route': {
+      const url = cleanArgs[1];
+      if (!url) {
+        console.error(c('red', 'Error:'), 'URL pattern required');
+        process.exit(1);
+      }
+      
+      const abortMode = args.includes('--abort');
+      const bodyIdx = args.findIndex(a => a === '--body');
+      let response: { status?: number; body?: string; contentType?: string } | undefined;
+      
+      if (bodyIdx !== -1 && args[bodyIdx + 1]) {
+        try {
+          const body = args[bodyIdx + 1];
+          response = { body, contentType: 'application/json' };
+        } catch {
+          response = { body: args[bodyIdx + 1] };
+        }
+      }
+      
+      cmd = { id, action: 'route', url, abort: abortMode, response };
+      break;
+    }
+    
+    case 'unroute': {
+      const url = cleanArgs[1];
+      cmd = { id, action: 'unroute', url };
+      break;
+    }
+    
+    case 'requests': {
+      const clearMode = args.includes('--clear');
+      const filterIdx = args.findIndex(a => a === '--filter');
+      const filter = filterIdx !== -1 ? args[filterIdx + 1] : undefined;
+      
+      cmd = { id, action: 'requests', clear: clearMode, filter };
+      break;
+    }
+    
+    case 'viewport': {
+      const width = parseInt(cleanArgs[1], 10);
+      const height = parseInt(cleanArgs[2], 10);
+      if (isNaN(width) || isNaN(height)) {
+        console.error(c('red', 'Error:'), 'Width and height required (e.g., veb viewport 1920 1080)');
+        process.exit(1);
+      }
+      cmd = { id, action: 'viewport', width, height };
+      break;
+    }
+    
+    case 'device': {
+      const device = cleanArgs[1];
+      if (!device) {
+        console.error(c('red', 'Error:'), 'Device name required (e.g., veb device "iPhone 14")');
+        process.exit(1);
+      }
+      cmd = { id, action: 'device', device };
+      break;
+    }
+    
+    case 'geolocation':
+    case 'geo': {
+      const lat = parseFloat(cleanArgs[1]);
+      const lng = parseFloat(cleanArgs[2]);
+      if (isNaN(lat) || isNaN(lng)) {
+        console.error(c('red', 'Error:'), 'Latitude and longitude required');
+        process.exit(1);
+      }
+      cmd = { id, action: 'geolocation', latitude: lat, longitude: lng };
+      break;
+    }
+    
+    case 'permissions': {
+      const grantOrDeny = cleanArgs[1];
+      const perms = cleanArgs.slice(2);
+      if ((grantOrDeny !== 'grant' && grantOrDeny !== 'deny') || perms.length === 0) {
+        console.error(c('red', 'Error:'), 'Usage: veb permissions grant|deny <permission...>');
+        process.exit(1);
+      }
+      cmd = { id, action: 'permissions', permissions: perms, grant: grantOrDeny === 'grant' };
+      break;
+    }
+    
+    case 'download': {
+      const selector = cleanArgs[1];
+      const downloadPath = cleanArgs[2];
+      if (!selector || !downloadPath) {
+        console.error(c('red', 'Error:'), 'Selector and path required');
+        process.exit(1);
+      }
+      cmd = { id, action: 'download', selector, path: downloadPath };
       break;
     }
     

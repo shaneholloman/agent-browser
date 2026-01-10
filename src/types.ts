@@ -168,6 +168,132 @@ export interface PdfCommand extends BaseCommand {
   format?: 'Letter' | 'Legal' | 'Tabloid' | 'Ledger' | 'A0' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6';
 }
 
+// Network interception
+export interface RouteCommand extends BaseCommand {
+  action: 'route';
+  url: string;
+  response?: {
+    status?: number;
+    body?: string;
+    contentType?: string;
+    headers?: Record<string, string>;
+  };
+  abort?: boolean;
+}
+
+export interface UnrouteCommand extends BaseCommand {
+  action: 'unroute';
+  url?: string; // If not provided, remove all routes
+}
+
+// Request inspection
+export interface RequestsCommand extends BaseCommand {
+  action: 'requests';
+  filter?: string; // URL pattern to filter
+  clear?: boolean;
+}
+
+// Download handling
+export interface DownloadCommand extends BaseCommand {
+  action: 'download';
+  selector: string;
+  path: string;
+}
+
+// Geolocation
+export interface GeolocationCommand extends BaseCommand {
+  action: 'geolocation';
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+}
+
+// Permissions
+export interface PermissionsCommand extends BaseCommand {
+  action: 'permissions';
+  permissions: string[];
+  grant: boolean;
+}
+
+// Viewport
+export interface ViewportCommand extends BaseCommand {
+  action: 'viewport';
+  width: number;
+  height: number;
+}
+
+// User agent
+export interface UserAgentCommand extends BaseCommand {
+  action: 'useragent';
+  userAgent: string;
+}
+
+// Emulate device
+export interface DeviceCommand extends BaseCommand {
+  action: 'device';
+  device: string;
+}
+
+// Go back/forward
+export interface BackCommand extends BaseCommand {
+  action: 'back';
+}
+
+export interface ForwardCommand extends BaseCommand {
+  action: 'forward';
+}
+
+export interface ReloadCommand extends BaseCommand {
+  action: 'reload';
+}
+
+// Get URL/Title
+export interface UrlCommand extends BaseCommand {
+  action: 'url';
+}
+
+export interface TitleCommand extends BaseCommand {
+  action: 'title';
+}
+
+// Attribute/Property/Text
+export interface GetAttributeCommand extends BaseCommand {
+  action: 'getattribute';
+  selector: string;
+  attribute: string;
+}
+
+export interface GetTextCommand extends BaseCommand {
+  action: 'gettext';
+  selector: string;
+}
+
+export interface IsVisibleCommand extends BaseCommand {
+  action: 'isvisible';
+  selector: string;
+}
+
+export interface IsEnabledCommand extends BaseCommand {
+  action: 'isenabled';
+  selector: string;
+}
+
+export interface IsCheckedCommand extends BaseCommand {
+  action: 'ischecked';
+  selector: string;
+}
+
+export interface CountCommand extends BaseCommand {
+  action: 'count';
+  selector: string;
+}
+
+// Bounding box
+export interface BoundingBoxCommand extends BaseCommand {
+  action: 'boundingbox';
+  selector: string;
+}
+
 export interface PressCommand extends BaseCommand {
   action: 'press';
   key: string;
@@ -294,7 +420,28 @@ export type Command =
   | StorageSetCommand
   | StorageClearCommand
   | DialogCommand
-  | PdfCommand;
+  | PdfCommand
+  | RouteCommand
+  | UnrouteCommand
+  | RequestsCommand
+  | DownloadCommand
+  | GeolocationCommand
+  | PermissionsCommand
+  | ViewportCommand
+  | UserAgentCommand
+  | DeviceCommand
+  | BackCommand
+  | ForwardCommand
+  | ReloadCommand
+  | UrlCommand
+  | TitleCommand
+  | GetAttributeCommand
+  | GetTextCommand
+  | IsVisibleCommand
+  | IsEnabledCommand
+  | IsCheckedCommand
+  | CountCommand
+  | BoundingBoxCommand;
 
 // Response types
 export interface SuccessResponse<T = unknown> {

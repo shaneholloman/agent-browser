@@ -1,6 +1,6 @@
 # veb
 
-Headless browser automation CLI for agents and humans. Near-complete Playwright parity.
+Headless browser automation CLI for agents and humans. Full Playwright parity.
 
 ## Installation
 
@@ -15,6 +15,13 @@ pnpm build
 ```bash
 # Navigation
 veb open https://example.com
+veb back                         # Go back
+veb forward                      # Go forward  
+veb reload                       # Reload page
+
+# Page info
+veb url                          # Get current URL
+veb title                        # Get page title
 
 # Clicking
 veb click "#submit-btn"
@@ -40,6 +47,9 @@ veb drag "#source" "#target"
 veb upload "#file-input" ./document.pdf
 veb upload "#files" ./a.png ./b.png
 
+# Downloads
+veb download "#download-btn" ./file.zip
+
 # Waiting
 veb wait "#loading"              # Wait for selector
 veb wait --text "Welcome"        # Wait for text
@@ -55,6 +65,15 @@ veb pdf report.pdf
 veb snapshot                     # Accessibility tree (best for agents)
 veb extract "#main"              # Get HTML
 veb eval "document.title"        # Run JavaScript
+
+# Element info
+veb gettext "#message"           # Get text content
+veb getattr "#link" "href"       # Get attribute
+veb isvisible "#modal"           # Check visibility
+veb isenabled "#submit"          # Check if enabled
+veb ischecked "#checkbox"        # Check if checked
+veb count ".items"               # Count matching elements
+veb boundingbox "#element"       # Get position/size
 
 # Scrolling
 veb scroll down 500
@@ -72,6 +91,19 @@ veb placeholder "Search..." fill "query"
 # Frames/iframes
 veb frame "#iframe"              # Switch to iframe
 veb mainframe                    # Switch back to main
+
+# Network interception
+veb route "**/*.png" --abort                    # Block images
+veb route "**/api/*" --body '{"mock":true}'     # Mock API
+veb unroute                                      # Remove all routes
+veb requests                                     # View tracked requests
+veb requests --filter "api"                      # Filter requests
+
+# Browser settings
+veb viewport 1920 1080           # Set viewport size
+veb device "iPhone 14"           # Emulate device
+veb geolocation 37.7749 -122.4194  # Set location (SF)
+veb permissions grant geolocation notifications
 
 # Cookies
 veb cookies                      # Get all cookies
@@ -116,14 +148,24 @@ Use `--json` flag for machine-readable output:
 ```bash
 veb snapshot --json
 veb eval "document.title" --json
+veb isvisible "#modal" --json
 ```
 
-## Commands Reference
+## All Commands
 
-### Navigation & Interaction
+### Navigation
 | Command | Description |
 |---------|-------------|
 | `open <url>` | Navigate to URL |
+| `back` | Go back |
+| `forward` | Go forward |
+| `reload` | Reload page |
+| `url` | Get current URL |
+| `title` | Get page title |
+
+### Interaction
+| Command | Description |
+|---------|-------------|
 | `click <selector>` | Click element |
 | `dblclick <selector>` | Double-click |
 | `type <selector> <text>` | Type text |
@@ -136,7 +178,19 @@ veb eval "document.title" --json
 | `focus <selector>` | Focus |
 | `drag <src> <target>` | Drag & drop |
 | `upload <selector> <files>` | Upload files |
+| `download <selector> <path>` | Download file |
 | `scroll <dir> [amount]` | Scroll |
+
+### Element Info
+| Command | Description |
+|---------|-------------|
+| `gettext <selector>` | Get text content |
+| `getattr <selector> <attr>` | Get attribute |
+| `isvisible <selector>` | Check visibility |
+| `isenabled <selector>` | Check enabled |
+| `ischecked <selector>` | Check checked |
+| `count <selector>` | Count elements |
+| `boundingbox <selector>` | Get bounds |
 
 ### Semantic Locators
 | Command | Description |
@@ -154,6 +208,22 @@ veb eval "document.title" --json
 | `snapshot` | Accessibility tree |
 | `extract <selector>` | Get HTML |
 | `eval <script>` | Run JavaScript |
+| `wait <sel\|text\|ms>` | Wait |
+
+### Network
+| Command | Description |
+|---------|-------------|
+| `route <url> [options]` | Intercept requests |
+| `unroute [url]` | Remove routes |
+| `requests [--filter]` | View requests |
+
+### Browser Settings
+| Command | Description |
+|---------|-------------|
+| `viewport <w> <h>` | Set viewport |
+| `device <name>` | Emulate device |
+| `geolocation <lat> <lng>` | Set location |
+| `permissions grant\|deny` | Set permissions |
 
 ### Browser State
 | Command | Description |
@@ -161,11 +231,9 @@ veb eval "document.title" --json
 | `cookies` | Get cookies |
 | `cookies set <json>` | Set cookies |
 | `cookies clear` | Clear cookies |
-| `storage local [key]` | Get localStorage |
-| `storage local set <k> <v>` | Set localStorage |
-| `storage local clear` | Clear localStorage |
-| `dialog accept [text]` | Accept dialog |
-| `dialog dismiss` | Dismiss dialog |
+| `storage local [key]` | localStorage |
+| `storage session [key]` | sessionStorage |
+| `dialog accept\|dismiss` | Handle dialogs |
 
 ### Frames & Tabs
 | Command | Description |
@@ -181,7 +249,6 @@ veb eval "document.title" --json
 ### Session & Control
 | Command | Description |
 |---------|-------------|
-| `wait <sel\|text\|ms>` | Wait for condition |
 | `session` | Show session |
 | `session list` | List sessions |
 | `close` | Close browser |
@@ -197,7 +264,48 @@ veb eval "document.title" --json
 | `--name, -n` | Locator name filter |
 | `--exact` | Exact text match |
 | `--text, -t` | Wait for text |
+| `--abort` | Abort route |
+| `--body` | Route response body |
+| `--filter` | Filter requests |
 | `--debug` | Debug output |
+
+## Device Emulation
+
+```bash
+# Mobile devices
+veb device "iPhone 14"
+veb device "iPhone 14 Pro Max"
+veb device "Pixel 7"
+veb device "Galaxy S23"
+
+# Tablets
+veb device "iPad Pro 11"
+veb device "Galaxy Tab S8"
+
+# Desktop
+veb viewport 1920 1080
+veb viewport 2560 1440
+```
+
+## Sessions
+
+Sessions allow multiple agents to use veb simultaneously without interfering:
+
+```bash
+# Using --session flag
+veb --session agent1 open https://site-a.com
+veb --session agent2 open https://site-b.com
+
+# Using environment variable
+export VEB_SESSION=agent1
+veb open https://example.com
+
+# List all running sessions
+veb session list
+
+# Close a specific session
+veb --session agent1 close
+```
 
 ## Selectors
 
