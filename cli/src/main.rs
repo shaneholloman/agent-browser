@@ -126,6 +126,26 @@ fn incompatible_launch_mode_error(flags: &Flags) -> Option<&'static str> {
         return Some("Cannot use --extension with --cdp (extensions require local browser)");
     }
 
+    // The WebGPU preset is Chrome launch flags; it cannot be applied to a
+    // browser agent-browser did not launch. Rejecting (rather than silently
+    // ignoring) matches the --extension handling above. `--webgpu false`
+    // overrides an env/config-enabled preset for these modes.
+    if flags.webgpu && flags.cdp.is_some() {
+        return Some(
+            "Cannot use --webgpu with --cdp (the WebGPU preset requires a local browser launch; pass --webgpu false to override env/config)",
+        );
+    }
+    if flags.webgpu && flags.provider.is_some() {
+        return Some(
+            "Cannot use --webgpu with -p/--provider (the WebGPU preset requires a local browser launch; pass --webgpu false to override env/config)",
+        );
+    }
+    if flags.webgpu && flags.auto_connect {
+        return Some(
+            "Cannot use --webgpu with --auto-connect (the WebGPU preset requires a local browser launch; pass --webgpu false to override env/config)",
+        );
+    }
+
     None
 }
 
@@ -963,6 +983,14 @@ fn main() {
             quick: args.iter().any(|a| a == "--quick"),
             fix: args.iter().any(|a| a == "--fix"),
             json: flags.json,
+            // Explicit CLI opt-in only: a global AGENT_BROWSER_WEBGPU/config
+            // "webgpu": true must not make every doctor run launch the extra
+            // Chrome probe (and fail on hosts missing Vulkan deps).
+            webgpu: flags.cli_webgpu && flags.webgpu,
+            debug: flags.debug,
+            // Merged (env/config included) so the probe reflects how the
+            // user's sessions actually launch.
+            headed: flags.headed,
         };
         exit(doctor::run_doctor(opts));
     }
@@ -1200,6 +1228,7 @@ fn main() {
         ignore_https_errors: flags.ignore_https_errors,
         allow_file_access: flags.allow_file_access,
         hide_scrollbars: flags.hide_scrollbars,
+        webgpu: flags.webgpu,
         profile: flags.profile.as_deref(),
         state: flags.state.as_deref(),
         provider: flags.provider.as_deref(),
@@ -1422,6 +1451,8 @@ fn main() {
             flags.cli_hide_scrollbars,
             flags.hide_scrollbars,
         )
+        || flags.webgpu
+        || flags.cli_webgpu
         || flags.color_scheme.is_some()
         || flags.download_path.is_some()
         || flags.engine.is_some()
@@ -1435,8 +1466,16 @@ fn main() {
         let mut launch_cmd = json!({
             "id": gen_id(),
             "action": "launch",
-            "headless": !flags.headed
         });
+        // Only send headless when the user set it on this invocation. When
+        // absent, the daemon falls back to its spawn-time AGENT_BROWSER_HEADED
+        // env, so a follow-up command without --headed (common when env vars
+        // like AGENT_BROWSER_ARGS force a launch command on every call) does
+        // not flip a headed session back to headless and relaunch the browser
+        // onto about:blank.
+        if flags.headed || flags.cli_headed {
+            launch_cmd["headless"] = json!(!flags.headed);
+        }
         launch_cmd["plugins"] = json!(flags.plugins.clone());
         attach_restore_config_to_command(&mut launch_cmd, &flags);
 
@@ -1513,6 +1552,15 @@ fn main() {
             flags.cli_hide_scrollbars,
             flags.hide_scrollbars,
         );
+
+        if flags.webgpu || flags.cli_webgpu {
+            launch_cmd["webgpu"] = json!(flags.webgpu);
+        }
+
+        // Env-only opt-out for automatic Xvfb; always stamped from the CLI's
+        // fresh environment so both setting and unsetting the var take effect
+        // on daemons spawned before the change.
+        launch_cmd["noXvfb"] = json!(flags.no_xvfb);
 
         if let Some(ref cs) = flags.color_scheme {
             launch_cmd["colorScheme"] = json!(cs);
@@ -1955,6 +2003,8 @@ mod tests {
 
     fn launch_mode_flags(auto_connect: bool, cdp: bool, provider: bool, extensions: bool) -> Flags {
         let mut flags = parse_flags(&[]);
+        // Deterministic regardless of ambient AGENT_BROWSER_WEBGPU.
+        flags.webgpu = false;
         flags.auto_connect = auto_connect;
         flags.cdp = cdp.then(|| "9222".to_string());
         flags.provider = provider.then(|| "ios".to_string());
@@ -1994,6 +2044,44 @@ mod tests {
         for (flags, expected) in cases {
             assert_eq!(incompatible_launch_mode_error(&flags), Some(expected));
         }
+    }
+
+    #[test]
+    fn test_incompatible_launch_mode_error_rejects_webgpu_attach_modes() {
+        let with_webgpu = |mut flags: Flags| {
+            flags.webgpu = true;
+            flags
+        };
+        let cases = [
+            (
+                with_webgpu(launch_mode_flags(false, true, false, false)),
+                "Cannot use --webgpu with --cdp (the WebGPU preset requires a local browser launch; pass --webgpu false to override env/config)",
+            ),
+            (
+                with_webgpu(launch_mode_flags(false, false, true, false)),
+                "Cannot use --webgpu with -p/--provider (the WebGPU preset requires a local browser launch; pass --webgpu false to override env/config)",
+            ),
+            (
+                with_webgpu(launch_mode_flags(true, false, false, false)),
+                "Cannot use --webgpu with --auto-connect (the WebGPU preset requires a local browser launch; pass --webgpu false to override env/config)",
+            ),
+        ];
+        for (flags, expected) in cases {
+            assert_eq!(incompatible_launch_mode_error(&flags), Some(expected));
+        }
+
+        // webgpu alone (local launch) is fine.
+        assert_eq!(
+            incompatible_launch_mode_error(&with_webgpu(launch_mode_flags(
+                false, false, false, false
+            ))),
+            None
+        );
+        // Attach modes without webgpu stay allowed.
+        assert_eq!(
+            incompatible_launch_mode_error(&launch_mode_flags(false, true, false, false)),
+            None
+        );
     }
 
     #[test]

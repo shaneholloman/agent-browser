@@ -2778,6 +2778,12 @@ encryption key) are gated behind --fix.
 Options:
   --offline            Skip network probes
   --quick              Skip the live headless launch test
+  --webgpu             Also run a live WebGPU render probe (renders via a real
+                       WebGPU pass and pixel-checks both an in-page readback
+                       and a decoded screenshot; launches a second Chrome)
+  --headed             Run the WebGPU probe headed to validate the capture
+                       path (auto-Xvfb on displayless Linux)
+  --debug              Verbose diagnostics from the probes' scratch daemons
   --fix                Also run destructive repairs
   --json               JSON output
 
@@ -2788,6 +2794,8 @@ Exit codes:
 Examples:
   agent-browser doctor
   agent-browser doctor --offline --quick
+  agent-browser doctor --webgpu
+  agent-browser doctor --webgpu --headed
   agent-browser doctor --fix
   agent-browser doctor --json
 "##
@@ -3523,6 +3531,7 @@ Options:
   --screenshot-quality <n>   JPEG quality 0-100; ignored for PNG (or AGENT_BROWSER_SCREENSHOT_QUALITY)
   --screenshot-format <fmt>  Screenshot format: png, jpeg (or AGENT_BROWSER_SCREENSHOT_FORMAT)
   --headed                   Show browser window (not headless) (or AGENT_BROWSER_HEADED env)
+  --webgpu                   Enable WebGPU; uses SwiftShader software Vulkan on Linux, no GPU required (or AGENT_BROWSER_WEBGPU env)
   --cdp <port>               Connect via CDP (Chrome DevTools Protocol)
   --color-scheme <scheme>    Color scheme: dark, light, no-preference (or AGENT_BROWSER_COLOR_SCHEME)
   --download-path <path>     Default download directory (or AGENT_BROWSER_DOWNLOAD_PATH)
@@ -3582,6 +3591,8 @@ Environment:
   AGENT_BROWSER_INIT_SCRIPTS     Comma-separated paths to page init scripts
   AGENT_BROWSER_ENABLE           Comma-separated built-in init script features (e.g. react-devtools)
   AGENT_BROWSER_HEADED           Show browser window (not headless)
+  AGENT_BROWSER_NO_XVFB          Disable automatic Xvfb for headed mode on displayless Linux hosts
+  AGENT_BROWSER_WEBGPU           Enable WebGPU (SwiftShader software Vulkan on Linux)
   AGENT_BROWSER_JSON             JSON output
   AGENT_BROWSER_ANNOTATE         Annotated screenshot with numbered labels and legend
   AGENT_BROWSER_DEBUG            Debug output

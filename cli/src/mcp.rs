@@ -749,7 +749,8 @@ fn tools() -> Vec<Value> {
             "Launch the browser and optionally navigate to a URL.",
             json!({
                 "url": { "type": "string", "description": "URL to open. Omit to launch about:blank." },
-                "headed": { "type": "boolean", "default": false, "description": "Show the browser window." }
+                "headed": { "type": "boolean", "description": "Show the browser window. Explicit true/false overrides AGENT_BROWSER_HEADED and config; omit to use those defaults." },
+                "webgpu": { "type": "boolean", "description": "Enable WebGPU (SwiftShader software Vulkan on Linux; no GPU required). Explicit true/false overrides AGENT_BROWSER_WEBGPU and config; omit to use those defaults." }
             }),
             &[],
         ),
@@ -1719,7 +1720,7 @@ fn parity_tools() -> Vec<Value> {
             TOOL_DOCTOR,
             "Doctor",
             "Diagnose the installation.",
-            json!({ "offline": { "type": "boolean" }, "quick": { "type": "boolean" }, "fix": { "type": "boolean" } }),
+            json!({ "offline": { "type": "boolean" }, "quick": { "type": "boolean" }, "fix": { "type": "boolean" }, "webgpu": { "type": "boolean", "description": "Also run a live WebGPU render probe (launches a second Chrome)." }, "headed": { "type": "boolean", "description": "Run the WebGPU probe headed to validate the capture path (auto-Xvfb on displayless Linux). Explicit true/false overrides AGENT_BROWSER_HEADED/config." }, "debug": { "type": "boolean", "description": "Verbose diagnostics from the probes' scratch daemons." } }),
             &[],
         ),
         tool(
@@ -2306,10 +2307,19 @@ fn call_keyboard(arguments: &Value, subcommand: &str) -> Result<Value, ProtocolE
     )
 }
 
-fn call_open(arguments: &Value) -> Result<Value, ProtocolError> {
+/// Build the CLI args for the open tool. Explicit booleans are forwarded as
+/// `--flag true|false` so an MCP caller can override env/config defaults
+/// (e.g. webgpu: false with AGENT_BROWSER_WEBGPU=1 set); an absent field
+/// sends nothing and leaves the env/config resolution to the CLI.
+fn open_args(arguments: &Value) -> Result<Vec<String>, ProtocolError> {
     let mut args = Vec::new();
-    if optional_bool(arguments, "headed")?.unwrap_or(false) {
+    if let Some(headed) = optional_bool(arguments, "headed")? {
         args.push("--headed".to_string());
+        args.push(headed.to_string());
+    }
+    if let Some(webgpu) = optional_bool(arguments, "webgpu")? {
+        args.push("--webgpu".to_string());
+        args.push(webgpu.to_string());
     }
     args.push("open".to_string());
     if let Some(url) = optional_string(arguments, "url")? {
@@ -2317,6 +2327,11 @@ fn call_open(arguments: &Value) -> Result<Value, ProtocolError> {
             args.push(url);
         }
     }
+    Ok(args)
+}
+
+fn call_open(arguments: &Value) -> Result<Value, ProtocolError> {
+    let args = open_args(arguments)?;
     call_cli_tool(arguments, args, None)
 }
 
@@ -3198,7 +3213,11 @@ fn plugin_run_args(arguments: &Value) -> Result<Vec<String>, ProtocolError> {
     Ok(args)
 }
 
-fn call_doctor(arguments: &Value) -> Result<Value, ProtocolError> {
+/// Build the CLI args for the doctor tool. offline/quick/fix are parsed by
+/// doctor as bare presence flags, so they are only sent when true; the
+/// value-taking booleans are forwarded explicitly so callers can override
+/// env/config defaults (e.g. headed: false with AGENT_BROWSER_HEADED=1).
+fn doctor_args(arguments: &Value) -> Result<Vec<String>, ProtocolError> {
     let mut args = vec!["doctor".to_string()];
     for (key, flag) in [
         ("offline", "--offline"),
@@ -3209,6 +3228,21 @@ fn call_doctor(arguments: &Value) -> Result<Value, ProtocolError> {
             args.push(flag.to_string());
         }
     }
+    for (key, flag) in [
+        ("webgpu", "--webgpu"),
+        ("headed", "--headed"),
+        ("debug", "--debug"),
+    ] {
+        if let Some(value) = optional_bool(arguments, key)? {
+            args.push(flag.to_string());
+            args.push(value.to_string());
+        }
+    }
+    Ok(args)
+}
+
+fn call_doctor(arguments: &Value) -> Result<Value, ProtocolError> {
+    let args = doctor_args(arguments)?;
     call_cli_tool(arguments, args, None)
 }
 
@@ -3707,6 +3741,75 @@ mod tests {
         assert!(names.contains(&TOOL_SESSION_ID));
         assert!(names.contains(&TOOL_SESSION_INFO));
         assert!(!names.contains(&"agent_browser_frame_list"));
+    }
+
+    #[test]
+    fn open_tool_exposes_launch_options() {
+        let tools = tools();
+        let open = tools
+            .iter()
+            .find(|t| t["name"].as_str() == Some(TOOL_OPEN))
+            .unwrap();
+        let props = &open["inputSchema"]["properties"];
+        assert!(props.get("headed").is_some());
+        assert!(props.get("webgpu").is_some());
+    }
+
+    #[test]
+    fn open_args_forwards_explicit_booleans() {
+        // Absent fields send nothing (env/config resolution stays with the CLI).
+        assert_eq!(open_args(&json!({})).unwrap(), vec!["open"]);
+
+        // Explicit true and false are both forwarded, so MCP callers can
+        // override AGENT_BROWSER_WEBGPU/config just like `--webgpu false`.
+        assert_eq!(
+            open_args(&json!({ "webgpu": false, "url": "https://example.com" })).unwrap(),
+            vec!["--webgpu", "false", "open", "https://example.com"]
+        );
+        assert_eq!(
+            open_args(&json!({ "headed": true, "webgpu": true })).unwrap(),
+            vec!["--headed", "true", "--webgpu", "true", "open"]
+        );
+        assert_eq!(
+            open_args(&json!({ "headed": false })).unwrap(),
+            vec!["--headed", "false", "open"]
+        );
+    }
+
+    #[test]
+    fn doctor_tool_exposes_webgpu_option() {
+        let tools = tools();
+        let doctor = tools
+            .iter()
+            .find(|t| t["name"].as_str() == Some(TOOL_DOCTOR))
+            .unwrap();
+        let props = &doctor["inputSchema"]["properties"];
+        assert!(props.get("offline").is_some());
+        assert!(props.get("quick").is_some());
+        assert!(props.get("fix").is_some());
+        assert!(props.get("webgpu").is_some());
+        assert!(props.get("headed").is_some());
+        assert!(props.get("debug").is_some());
+    }
+
+    #[test]
+    fn doctor_args_forwards_explicit_booleans() {
+        assert_eq!(doctor_args(&json!({})).unwrap(), vec!["doctor"]);
+        // Presence flags only sent when true.
+        assert_eq!(
+            doctor_args(&json!({ "offline": true, "quick": false })).unwrap(),
+            vec!["doctor", "--offline"]
+        );
+        // Value-taking booleans forwarded both ways so env/config can be
+        // overridden.
+        assert_eq!(
+            doctor_args(&json!({ "webgpu": true, "headed": false })).unwrap(),
+            vec!["doctor", "--webgpu", "true", "--headed", "false"]
+        );
+        assert_eq!(
+            doctor_args(&json!({ "debug": true })).unwrap(),
+            vec!["doctor", "--debug", "true"]
+        );
     }
 
     #[test]
